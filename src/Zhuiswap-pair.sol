@@ -8,9 +8,6 @@ import "./library/math.sol";
 contract ZhuiswapPair {
     uint256 private constant MINIMUM_LIQUIDITY = 1000;
 
-    //Lp token总量
-    uint256 public LpTokenSupply = 0;
-
     //池子的两种token
     address public tokenA;
     address public tokenB;
@@ -20,6 +17,7 @@ contract ZhuiswapPair {
     uint256 public reserveB;
 
     event Mint(address indexed sender, uint256 indexed amount);
+    event Burn(address indexed sender, uint256 indexed amountA);
 
     constructor(address _tokenA, address _tokenB) ERC20("ZhuiswapPair", "ZLP") {
         require(_tokenA != _tokenB, "Constructor: Identical token addresses");
@@ -43,8 +41,8 @@ contract ZhuiswapPair {
             _mint(address(this), MINIMUM_LIQUIDITY);
         } else {
             liquidity = Math.min(
-                (amountA * LpTokenSupply) / reserveA,
-                (amountB * LpTokenSupply) / reserveB
+                (amountA * totalSupply()) / reserveA,
+                (amountB * totalSupply()) / reserveB
             );
         }
 
@@ -59,14 +57,28 @@ contract ZhuiswapPair {
         return true;
     }
 
-    // 减池子
+    // 撤池子
     function burn() public returns (bool) {
-        //获取reserve数量
-        uint256 balanceOfA = IERC20(tokenA).balanceOf(address(this));
-        uint256 balanceOfB = IERC20(tokenB).balanceOf(address(this));
-
         //获取Lp代币持有者的Lp代币数量
         uint256 liquidity = balanceOf(msg.sender);
+
+        //计算LP持有者对应的token数量
+        uint256 amountA = (liquidity * reserveA) / totalSupply();
+        uint256 amountB = (liquidity * reserveB) / totalSupply();
+
+        //token转账
+        IERC20(tokenA).transfer(msg.sender, amountA);
+        IERC20(tokenB).transfer(msg.sender, amountB);
+
+        //燃烧持有者的Lp代币
+        _burn(msg.sender, liquidity);
+
+        //更新储备
+        updateReserve();
+
+        emit Burn(msg.sender, liquidity);
+
+        return true;
     }
 
     //更新储备
