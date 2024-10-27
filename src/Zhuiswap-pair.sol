@@ -26,7 +26,7 @@ contract ZhuiswapPair {
     }
 
     //加池子
-    function mint() public returns (bool) {
+    function mint() public returns (bool, uint256) {
         //获取当前池子的token数量
         uint256 balanceOfA = IERC20(tokenA).balanceOf(address(this));
         uint256 balanceOfB = IERC20(tokenB).balanceOf(address(this));
@@ -46,6 +46,7 @@ contract ZhuiswapPair {
             );
         }
 
+        //为调用者mint Lp token
         _mint(msg.sender, liquidity);
         LpTokenSupply += liquidity;
 
@@ -54,7 +55,7 @@ contract ZhuiswapPair {
 
         emit Mint(msg.sender, liquidity);
 
-        return true;
+        return (ture, liquidity0);
     }
 
     // 撤池子
