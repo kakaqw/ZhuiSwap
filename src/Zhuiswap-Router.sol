@@ -3,16 +3,24 @@ pragma solidity ^0.8.13;
 
 import "./Zhuiswap-Pair.sol";
 import "./Zhuiswap-Factory.sol";
+import "./interface/IZhuiswap-factory.sol";
 import "./interface/IZhuiswap-Pair.sol";
 import "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "./library/math.sol";
 
 contract ZhuiswapRouter {
+    address public immutable factory;
+
     event Transfer(
         address token,
         address indexed from,
         address indexed to,
         uint256 value
     );
+
+    constructor(address _factory) {
+        factory = _factory;
+    }
 
     function addLiquidity(
         address tokenA,
@@ -22,7 +30,7 @@ contract ZhuiswapRouter {
         uint256 amountlptokenMin
     ) public {
         //查询池子是否存在
-        address pool = getPair(tokenA, tokenB);
+        address pool = IZhuiswapFactory(factory).getPair(tokenA, tokenB);
         require(pool != address(0), "Router: Pool does not exist");
 
         //进行授权
@@ -44,7 +52,7 @@ contract ZhuiswapRouter {
         //向msg.sender转移Lp token
         IERC20(pool).transfer(msg.sender, lpAmount);
 
-        emit transfer(pool, address(this), msg.sender, lpAmount);
+        emit Transfer(pool, address(this), msg.sender, lpAmount);
     }
 
     function removeLiquidity(
@@ -54,7 +62,7 @@ contract ZhuiswapRouter {
         uint256 lpAmount
     ) public {
         //查询池子是否存在
-        address pool = getPair(tokenA, tokenB);
+        address pool = IZhuiswapFactory(factory).getPair(tokenA, tokenB);
         require(pool != address(0), "Router: Pool does not exist");
 
         // 检查授权Lp token
@@ -73,13 +81,48 @@ contract ZhuiswapRouter {
         uint256 amountA = IERC20(tokenA).balanceOf(address(this));
         uint256 amountB = IERC20(tokenB).balanceOf(address(this));
 
-        //想msg.sender转移token
+        //向msg.sender转移token
         IERC20(tokenA).transfer(msg.sender, amountA);
         IERC20(tokenB).transfer(msg.sender, amountB);
 
         emit Transfer(tokenA, address(this), msg.sender, amountA);
-        emit Transfer(tokenB, address(this), msg.sender, amountb);
+        emit Transfer(tokenB, address(this), msg.sender, amountB);
     }
 
-    function swap() public {}
+    function swap(
+        address inputToken,
+        address outputToken,
+        uint256 inputAmount,
+        uint256 outputAmount,
+        uint256 minoutputAmount
+    ) public {
+        //通过factory查看池子是否存在
+        address pool = IZhuiswapFactory(factory).getPair(
+            inputToken,
+            outputToken
+        );
+        require(pool != address(0), "Router: Pool does not exist");
+
+        //检查是否有授权
+        uint256 approveToken = IERC20(inputToken).allowance(msg.sender, pool);
+        require(approveToken >= inputAmount, "Router: Insufficient allowance");
+
+        //获取池子token储备
+        uint256 poolReserveA = IERC20(inputToken).balanceOf(pool);
+        uint256 poolReserveB = IERC20(outputToken).balanceOf(pool);
+
+        //计算output值
+        uint256 outputValue = math.getAmountOut(
+            poolReserveA,
+            poolReserveB,
+            inputAmount,
+            minoutputAmount
+        );
+
+        //转移token
+        IERC20(inputToken).transferFrom(msg.sender, pool, inputAmount);
+
+        //开始交易
+        IZhuiswapPair(pool).swap(minoutputAmount, msg.sender);
+    }
 }
